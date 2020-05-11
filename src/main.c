@@ -1,5 +1,5 @@
 #define UNUSED(x) (void)(x)
-#define DOMAIN "api.meshvisor.wip"
+#define DOMAIN "api.meshvisor.com"
 #define API_METHOD_JOB "job"
 #define API_METHOD_CONFIG "config"
 
