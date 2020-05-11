@@ -29,7 +29,7 @@ struct request *requestInit(struct config *config, char *url) {
     curl_easy_setopt(request->curl, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(request->curl, CURLOPT_CONNECTTIMEOUT, 15);
     curl_easy_setopt(request->curl, CURLOPT_TIMEOUT, 15);
-    curl_easy_setopt(request->curl, CURLOPT_PROXY, "http://127.0.0.1:7080");//@TODO
+//    curl_easy_setopt(request->curl, CURLOPT_PROXY, "http://127.0.0.1:7080");//@TODO
     curl_easy_setopt(request->curl, CURLOPT_HTTPHEADER, headers);
 
 //    free(authorization);
@@ -135,7 +135,7 @@ cJSON *sendRequest(struct request *request) {
 
     res = curl_easy_perform(request->curl);
     if (res != CURLE_OK) {
-        logger(LOG_ERR, "Request error: %s", curl_easy_strerror(res));
+        logger(LOG_ERR, "Request error(%d): %s", res, curl_easy_strerror(res));
     } else {
         curl_easy_getinfo (request->curl, CURLINFO_RESPONSE_CODE, &http_code);
         switch (http_code) {
