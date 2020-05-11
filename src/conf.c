@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <cjson/cJSON.h>
+#include "src/cJSON/cJSON.h"
 #include "conf.h"
 #include "logger.h"
 #include "xalloc.h"

@@ -26,6 +26,7 @@
 #include <ctype.h>
 
 #include "ini.h"
+#include "../../xalloc.h"
 
 struct ini_t {
   char *data;
@@ -244,7 +245,7 @@ const char* ini_get(ini_t *ini, const char *section, const char *key) {
       val = next(ini, p);
       if (!section || !strcmpci(section, current_section)) {
         if (!strcmpci(p, key)) {
-          return val;
+          return xstrdup(val);
         }
       }
       p = val;

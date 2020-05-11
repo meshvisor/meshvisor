@@ -9,7 +9,7 @@
 #include <curl/curl.h>
 #include <unistd.h>
 #include <ftw.h>
-#include <cjson/cJSON.h>
+#include "src/cJSON/cJSON.h"
 #include <time.h>
 #include <errno.h>
 #include <wait.h>

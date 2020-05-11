@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 #include <curl/curl.h>
-#include <cjson/cJSON.h>
+#include "src/cJSON/cJSON.h"
 #include <stdbool.h>
 #include "../conf.h"
 #include "../logger.h"
@@ -14,6 +14,7 @@ struct request *requestInit(struct config *config, char *url) {
     char *authorization = NULL;
     struct curl_slist *headers = NULL;
 
+    request->query = NULL;
     request->post = NULL;
     request->url = url;
     request->curl = curl_easy_init();
