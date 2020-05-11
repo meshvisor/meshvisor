@@ -1,4 +1,4 @@
-AM_CFLAGS = -std=c99 -Wall -Wextra -Werror -lcurl -lconfig -lcjson -lcrypto -lm -O0
+AM_CFLAGS = -std=c99 -Wall -Wextra -Werror -lcurl -lcjson -lcrypto -lm -O0
 
 sbin_PROGRAMS=meshvisor
 meshvisor_SOURCES = \
@@ -11,6 +11,7 @@ meshvisor_SOURCES = \
  	src/keygen/keygen.c src/keygen/keygen.h \
  	src/tincStarter/tincStarter.c src/tincStarter/tincStarter.h \
  	src/pidfile/pidfile.c src/pidfile/pidfile.h \
+ 	src/ini/src/ini.c src/ini/src/ini.h \
 	src/main.c
 
 etcdir = ${prefix}/etc

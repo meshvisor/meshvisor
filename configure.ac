@@ -24,10 +24,6 @@ AC_C_INLINE
 AC_TYPE_PID_T
 AC_TYPE_SIZE_T
 
-PKG_CHECK_MODULES([LIBCONFIGXX], [libconfig++ >= 1.7],,
-  AC_MSG_ERROR([libconfig++ 1.7 or newer not found.])
-)
-
 # Checks for library functions.
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC

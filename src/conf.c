@@ -1,11 +1,12 @@
-#include <libconfig.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <cjson/cJSON.h>
 #include "conf.h"
 #include "logger.h"
 #include "xalloc.h"
+#include "ini/src/ini.h"
 
 void parseStateFileIfExists(struct config *config) {
     FILE *f = fopen(config->stateFilePath, "rb");
@@ -31,43 +32,77 @@ void parseStateFileIfExists(struct config *config) {
 
 struct config *parseUserConfig() {
     struct config *config = xmalloc(sizeof(struct config));
-    config_t cfg;
-    const char *str;
 
-    config_init(&cfg);
-    if (!config_read_file(&cfg, ETCDIR "/meshvisor.conf")) {
-        if (NULL == config_error_file(&cfg)) {
-            logger(LOG_ERR, "Cannot read config file %s/meshvisor.conf", ETCDIR);
-        } else {
-            logger(LOG_ERR, "%s:%d - %s", config_error_file(&cfg), config_error_line(&cfg), config_error_text(&cfg));
-        }
+    ini_t *cfg = ini_load(ETCDIR
+    "/meshvisor.conf");
+    if (NULL == cfg) {
+        fprintf(stderr, "Cannot read config file %s/meshvisor.conf\n", ETCDIR);
         abort();
-    } else {
-        if (!config_lookup_string(&cfg, "accessToken", &str)) {
-            logger(LOG_ERR, "Config property \"accessToken\" not exists");
-            abort();
-        } else {
-            config->accessToken = xstrdup(str);
-        }
-        if (!config_lookup_string(&cfg, "encryptionKey", &str)) {
-            logger(LOG_ERR, "Config property \"encryptionKey\" not exists");
-            abort();
-        } else {
-            config->encryptionKey = (uint8_t *) xstrdup(str);
-        }
-        if (!config_lookup_string(&cfg, "interface", &str)) {
-            logger(LOG_ERR, "Config property \"interface\" not exists");
-            abort();
-        } else {
-            config->interface = xstrdup(str);
-        }
+    }
+
+    config->accessToken = ini_get(cfg, "main", "accessToken");
+    if (NULL == config->accessToken) {
+        fprintf(stderr, "Config property \"accessToken\" not exists\n");
+    }
+
+    const char *encryptionKey = ini_get(cfg, "main", "encryptionKey");
+    if (NULL == encryptionKey) {
+        fprintf(stderr, "Config property \"encryptionKey\" not exists\n");
+    }
+    config->encryptionKey = (uint8_t *) encryptionKey;
+
+    config->interface = ini_get(cfg, "main", "interface");
+    if (NULL == config->interface) {
+        fprintf(stderr, "Config property \"interface\" not exists\n");
+    }
+
+    config->interface = ini_get(cfg, "main", "interface");
+    if (NULL == config->interface) {
+        fprintf(stderr, "Config property \"interface\" not exists\n");
+    }
+
+    const char *poolingRate = ini_get(cfg, "main", "poolingRate");
+    if (NULL == poolingRate) {
+        fprintf(stderr, "Config property \"poolingRate\" not exists\n");
+    }
+    config->poolingRate = atoi(poolingRate);
+
+    ini_free(cfg);
+
+//    config_init(&cfg);
+//    if (!config_read_file(&cfg, ETCDIR "/meshvisor.conf")) {
+//        if (NULL == config_error_file(&cfg)) {
+//            logger(LOG_ERR, "Cannot read config file %s/meshvisor.conf", ETCDIR);
+//        } else {
+//            logger(LOG_ERR, "%s:%d - %s", config_error_file(&cfg), config_error_line(&cfg), config_error_text(&cfg));
+//        }
+//        abort();
+//    } else {
+//        if (!config_lookup_string(&cfg, "accessToken", &str)) {
+//            logger(LOG_ERR, "Config property \"accessToken\" not exists");
+//            abort();
+//        } else {
+//            config->accessToken = xstrdup(str);
+//        }
+//        if (!config_lookup_string(&cfg, "encryptionKey", &str)) {
+//            logger(LOG_ERR, "Config property \"encryptionKey\" not exists");
+//            abort();
+//        } else {
+//            config->encryptionKey = (uint8_t *) xstrdup(str);
+//        }
+//        if (!config_lookup_string(&cfg, "interface", &str)) {
+//            logger(LOG_ERR, "Config property \"interface\" not exists");
+//            abort();
+//        } else {
+//            config->interface = xstrdup(str);
+//        }
 //        if (!config_lookup_int(&cfg, "poolingRate", config->poolingRate)) {
 //            logger(LOG_ERR, "Config property \"poolingRate\" not exists");
 //            abort();
 //        }
-        config->poolingRate = 3;
-    }
-    config_destroy(&cfg);
+//        config->poolingRate = 3;
+//    }
+//    config_destroy(&cfg);
 
     xasprintf(&config->pidMeshvisorFilePath, "%s/meshvisor.pid", RUNDIR);
     xasprintf(&config->pidStarterFilePath, "%s/tincStarter.pid", RUNDIR);

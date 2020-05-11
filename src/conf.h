@@ -2,10 +2,10 @@
 #include <stdint.h>
 
 struct config {
-	char *accessToken;
-    uint8_t *encryptionKey;
+	const char *accessToken;
+	uint8_t *encryptionKey;
     int poolingRate;
-    char *interface;
+    const char *interface;
     char *networkDir;
     char *pidMeshvisorFilePath;
     char *pidStarterFilePath;
