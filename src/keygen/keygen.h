@@ -1,0 +1,1 @@
+void keygen(char *configDir, char *hostsFilePath);
