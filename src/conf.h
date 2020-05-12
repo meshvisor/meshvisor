@@ -10,15 +10,22 @@ struct config {
     char *pidMeshvisorFilePath;
     char *pidStarterFilePath;
     char *pidTincFilePath;
+    char *stateFilePath;
+};
+
+struct state {
+    int number;
+    char *network;
+    char *node;
     char *configDir;
     char *tincConfPath;
     char *hostsDir;
     char *hostsFilePath;
-    char *stateFilePath;
     char *tincUpFilePath;
     char *tincDownFilePath;
-    int stateNumber;
 };
 
 struct config *parseUserConfig();
-void setConfigPaths(struct config *config, char *networkName, char *nodeName);
+struct state *parseStateFileIfExists(struct config *config);
+struct state *createState(struct config *config, int number, char *network, char *node);
+void dumpState(struct config *config, struct state *state);

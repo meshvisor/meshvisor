@@ -24,7 +24,7 @@ uint8_t *genIv() {
 }
 
 char *encodeFileByPath(char *path, uint8_t *key, int size) {
-    logger(LOG_DEBUG, "encodeFileByPath: '%s'", path);
+//    logger(LOG_DEBUG, "encodeFileByPath: '%s'", path);
     FILE *f = fopen(path, "rb");
     if (f == NULL) {
         logger(LOG_ERR, "encodeFileByPath: cannot open file: '%s'", path);
@@ -34,7 +34,7 @@ char *encodeFileByPath(char *path, uint8_t *key, int size) {
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
 
-    logger(LOG_DEBUG, "encodeFileByPath: filesize: '%ld'", fsize);
+//    logger(LOG_DEBUG, "encodeFileByPath: filesize: '%ld'", fsize);
     if (fsize + IV_SIZE > size) {
         logger(LOG_ERR, "Too big file size for encrypt");
         abort();
@@ -47,7 +47,7 @@ char *encodeFileByPath(char *path, uint8_t *key, int size) {
 //    printf("\nSRC: %s\n", string);
 
     uint8_t *iv = genIv();
-    logger(LOG_DEBUG, "encodeFileByPath: Iv: '%s'", iv);
+//    logger(LOG_DEBUG, "encodeFileByPath: Iv: '%s'", iv);
 
     struct AES_ctx ctx;
     AES_init_ctx_iv(&ctx, key, iv);

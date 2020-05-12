@@ -22,14 +22,12 @@
 #include "tincStarter/tincStarter.h"
 #include "pidfile/pidfile.h"
 
-void initNetwork(cJSON *jobData, struct config *config);
-void updateNetwork(cJSON *jobData, struct config *config);
+struct state *initNetwork(cJSON *jobData, struct config *config);
+struct state *updateNetwork(cJSON *jobData, struct config *config);
 
 bool sendHostKey(struct config *config, char *encodedHost);
 
-void saveState(struct config *config, double stateNumber);
-
-void daemonMain(pid_t tincStarterPid, struct config *config);
+void daemonMain(pid_t tincStarterPid, struct config *config, struct state *state);
 
 static void sigchldHandler() {
     fprintf(stderr, "Daemon: TincStarter down\n");
@@ -39,6 +37,7 @@ static void sigchldHandler() {
 int main() {
     srand(time(NULL));
     struct config *config = parseUserConfig();
+    struct state *state = parseStateFileIfExists(config);
 
     pid_t forkPid = fork();
     if (forkPid == -1) {
@@ -55,7 +54,7 @@ int main() {
             }
             abort();
         }
-        if(!write_pid(config->pidMeshvisorFilePath)) {
+        if (!write_pid(config->pidMeshvisorFilePath)) {
             fprintf(stderr, "Daemon: Couldn't write pid file %s: %s\n", config->pidMeshvisorFilePath, strerror(errno));
             abort();
         }
@@ -64,7 +63,7 @@ int main() {
         sa.sa_flags = 0;
         sa.sa_handler = sigchldHandler;
         sigaction(SIGCHLD, &sa, NULL);
-        daemonMain(forkPid, config);
+        daemonMain(forkPid, config, state);
     }
 }
 
@@ -80,7 +79,8 @@ bool startTinc(pid_t tincStarterPid) {
     }
     return true;
 }
-void daemonMain(pid_t tincStarterPid, struct config *config) {
+
+void daemonMain(pid_t tincStarterPid, struct config *config, struct state *state) {
     //@TODO set paths if configured
     bool isTincStarted = false;
     identname = xstrdup("meshvisor");
@@ -94,74 +94,46 @@ void daemonMain(pid_t tincStarterPid, struct config *config) {
 
     while (1) {
         char *getJobQuery; //@TODO free
-        xasprintf(&getJobQuery, "state_number=%d", config->stateNumber);
+        xasprintf(&getJobQuery, "state_number=%d", state == NULL ? 0 : state->number);
         requestSetQuery(getJobRequest, getJobQuery);
         cJSON *getJobResponse = sendRequest(getJobRequest);
         if (NULL != getJobResponse) {
-            if (!cJSON_HasObjectItem(getJobResponse, "job")) {
-                logger(LOG_ERR, "Unexpected getJobResponse: Property 'job' isn't exists");
-            } else if (!cJSON_HasObjectItem(getJobResponse, "data")) {
-                logger(LOG_ERR, "Unexpected getJobResponse: Property 'data' isn't exists");
-            } else {
-                char *job = cJSON_GetObjectItem(getJobResponse, "job")->valuestring;
-                cJSON *jobData = cJSON_GetObjectItem(getJobResponse, "data");
-                if (!strcmp(job, "nothingToDo")) {
-                    if (!isTincStarted) {
-                        isTincStarted = startTinc(tincStarterPid);
-                    }
-                } else if (!strcmp(job, "init")) {
-                    initNetwork(jobData, config);
-                    char *encodedHost = encodeFileByPath(config->hostsFilePath, config->encryptionKey, 1600);
-                    if (sendHostKey(config, encodedHost)) {
-                        double stateNumber = cJSON_GetObjectItem(jobData, "stateNumber")->valueint;
-                        saveState(config, stateNumber);
-                    }
-                    free(encodedHost);
+            char *job = cJSON_GetObjectItem(getJobResponse, "job")->valuestring;
+            cJSON *jobData = cJSON_GetObjectItem(getJobResponse, "data");
+            if (!strcmp(job, "nothingToDo")) {
+                if (!isTincStarted) {
+                    isTincStarted = startTinc(tincStarterPid);
+                }
+            } else if (!strcmp(job, "init")) {
+                state = initNetwork(jobData, config);
+                char *encodedHost = encodeFileByPath(state->hostsFilePath, config->encryptionKey, 1600);
+                if (sendHostKey(config, encodedHost)) {
+                    dumpState(config, state);
                     logger(LOG_DEBUG, "Daemon: Send SIGUSR1 to Tink Starter");
                     isTincStarted = startTinc(tincStarterPid);
-                } else if (!strcmp(job, "update")) {
-                    updateNetwork(jobData, config);
-                    double stateNumber = cJSON_GetObjectItem(jobData, "stateNumber")->valueint;
-                    saveState(config, stateNumber);
-                    if (isTincStarted) {
-                        fprintf(stderr, "Daemon: Sending SIGHUP to Tinc for reread configs\n");
-                        if (kill(tincStarterPid, SIGHUP) == -1) {
-                            fprintf(stderr, "Daemon: Cannot send SIGHUP signal to Tinc\n");
-                            abort();
-                        }
-                    } else {
-                        isTincStarted = startTinc(tincStarterPid);
+                } else {
+                    state = NULL;
+                }
+                free(encodedHost);
+            } else if (!strcmp(job, "update")) {
+//                state = updateNetwork(jobData, config);
+//                dumpState(config, state);
+                if (isTincStarted) {
+                    fprintf(stderr, "Daemon: Sending SIGHUP to Tinc for reread configs\n");
+                    if (kill(tincStarterPid, SIGHUP) == -1) {
+                        fprintf(stderr, "Daemon: Cannot send SIGHUP signal to Tinc\n");
+                        abort();
                     }
                 } else {
-                    logger(LOG_ERR, "Unknown job %s", job);
+                    isTincStarted = startTinc(tincStarterPid);
                 }
+            } else {
+                logger(LOG_ERR, "Unknown job %s", job);
             }
         }
         logger(LOG_DEBUG, "Sleep %d", config->poolingRate);
         sleep(config->poolingRate);
     }
-}
-
-void saveState(struct config *config, double stateNumber) {
-    cJSON *state = cJSON_CreateObject();
-    cJSON *item = cJSON_AddNumberToObject(state, "number", stateNumber);
-    if (!item || item->valueint != stateNumber) {
-        logger(LOG_ERR, "Create postJson string property memory error");
-        abort();
-    }
-    char *jsonStr = cJSON_PrintUnformatted(state);
-    if (!jsonStr) {
-        logger(LOG_ERR, "Error generation postJsonStr");
-        abort();
-    }
-    FILE *fPtrTincConf = fopen(config->stateFilePath, "w");
-    if (fPtrTincConf == NULL) {
-        logger(LOG_ERR, "Cannot create tinc config file: '%s'", config->tincConfPath);
-        abort();
-    }
-    fprintf(fPtrTincConf, jsonStr);
-    fclose(fPtrTincConf);
-    config->stateNumber = stateNumber;
 }
 
 bool sendHostKey(struct config *config, char *encodedHost) {
@@ -184,38 +156,43 @@ int unlinkCb(const char *fpath, const struct stat *sb, int typeflag, struct FTW 
     if (rv) {
         perror(fpath);
     }
+
     return rv;
 }
 
-void initNetwork(cJSON *jobData, struct config *config) {
+struct state *initNetwork(cJSON *jobData, struct config *config) {
     cJSON *iterator = NULL;
     FILE *f = NULL;
 
     logger(LOG_INFO, "Start network init job");
-    char *nodeName = cJSON_GetObjectItem(jobData, "name")->valuestring;
     cJSON *network = cJSON_GetObjectItem(jobData, "network");
-    char *networkName = cJSON_GetObjectItem(network, "name")->valuestring;
+    struct state *state = createState(
+            config,
+            cJSON_GetObjectItem(jobData, "stateNumber")->valueint,
+            cJSON_GetObjectItem(network, "name")->valuestring,
+            cJSON_GetObjectItem(jobData, "name")->valuestring
+    );
+
     char *networkInternalIp = cJSON_GetObjectItem(network, "internalIp")->valuestring;
     char *networkInternalMask = cJSON_GetObjectItem(network, "internalMask")->valuestring;
     char *networkNodeSubnet = cJSON_GetObjectItem(network, "nodeSubnet")->valuestring;
     char *networkExternalIp = cJSON_GetObjectItem(network, "externalIp")->valuestring;
     char *addressFamily = cJSON_GetObjectItem(jobData, "addressFamily")->valuestring;
     cJSON *connectTo = cJSON_GetObjectItem(jobData, "connectTo");
-    logger(LOG_INFO, "Network name: '%s'; Node name: '%s';", networkName, nodeName);
-    setConfigPaths(config, networkName, nodeName);
-    logger(LOG_DEBUG, "Remove config folder '%s' if exists", config->configDir);
-    nftw(config->configDir, unlinkCb, 64, FTW_DEPTH | FTW_PHYS);
+    logger(LOG_INFO, "Network name: '%s'; Node name: '%s';", state->network, state->node);
+    logger(LOG_DEBUG, "Remove config folder '%s' if exists", state->configDir);
+    nftw(state->configDir, unlinkCb, 64, FTW_DEPTH | FTW_PHYS);
     logger(LOG_DEBUG, "Create config folders");
     mkdir(config->networkDir, 0755);
-    mkdir(config->configDir, 0755);
-    mkdir(config->hostsDir, 0755);
+    mkdir(state->configDir, 0755);
+    mkdir(state->hostsDir, 0755);
 
-    f = fopen(config->tincConfPath, "w");
+    f = fopen(state->tincConfPath, "w");
     if (f == NULL) {
-        logger(LOG_ERR, "Cannot create tinc config file: '%s'", config->tincConfPath);
+        logger(LOG_ERR, "Cannot create tinc config file: '%s'", state->tincConfPath);
         abort();
     }
-    fprintf(f, "Name = %s\n", nodeName);
+    fprintf(f, "Name = %s\n", state->node);
     fprintf(f, "AddressFamily = %s\n", addressFamily);
     fprintf(f, "Interface = %s\n", config->interface);
     cJSON_ArrayForEach(iterator, connectTo) {
@@ -223,9 +200,9 @@ void initNetwork(cJSON *jobData, struct config *config) {
     }
     fclose(f);
 
-    f = fopen(config->hostsFilePath, "w");
+    f = fopen(state->hostsFilePath, "w");
     if (f == NULL) {
-        logger(LOG_ERR, "Cannot create host file: '%s'", config->hostsFilePath);
+        logger(LOG_ERR, "Cannot create host file: '%s'", state->hostsFilePath);
         abort();
     }
     if (NULL != networkExternalIp) {
@@ -234,20 +211,20 @@ void initNetwork(cJSON *jobData, struct config *config) {
     fprintf(f, "Subnet = %s\n", networkNodeSubnet);
     fclose(f);
     logger(LOG_DEBUG, "Generate keys");
-    keygen(config->configDir, config->hostsFilePath);
+    keygen(state->configDir, state->hostsFilePath);
 
-    f = fopen(config->tincUpFilePath, "w");
+    f = fopen(state->tincUpFilePath, "w");
     if (f == NULL) {
-        logger(LOG_ERR, "Cannot create tinc-up file: '%s'", config->tincUpFilePath);
+        logger(LOG_ERR, "Cannot create tinc-up file: '%s'", state->tincUpFilePath);
         abort();
     }
     fprintf(f, "#!/bin/sh\n");
     fprintf(f, "ifconfig $INTERFACE %s netmask %s\n", networkInternalIp, networkInternalMask);
     fclose(f);
 
-    f = fopen(config->tincDownFilePath, "w");
+    f = fopen(state->tincDownFilePath, "w");
     if (f == NULL) {
-        logger(LOG_ERR, "Cannot create tinc-down file: '%s'", config->tincDownFilePath);
+        logger(LOG_ERR, "Cannot create tinc-down file: '%s'", state->tincDownFilePath);
         abort();
     }
     fprintf(f, "#!/bin/sh\n");
@@ -260,7 +237,7 @@ void initNetwork(cJSON *jobData, struct config *config) {
         char *hostName = cJSON_GetObjectItem(iterator, "name")->valuestring;
         char *hostEncodedConfig = cJSON_GetObjectItem(iterator, "config")->valuestring;
         char *hostPath;
-        xasprintf(&hostPath, "%s/%s", config->hostsDir, hostName);
+        xasprintf(&hostPath, "%s/%s", state->hostsDir, hostName);
         uint8_t *hostConfig = decode(hostEncodedConfig, config->encryptionKey, 1600);
         f = fopen(hostPath, "w");
         if (f == NULL) {
@@ -271,9 +248,14 @@ void initNetwork(cJSON *jobData, struct config *config) {
         fclose(f);
         free(hostPath);
     }
+
+    return state;
 }
 
-void updateNetwork(cJSON *jobData, struct config *config) {
-    (void)jobData;
-    (void)config;
+struct state *updateNetwork(cJSON *jobData, struct config *config) {
+    struct state *state = NULL;
+    (void) jobData;
+    (void) config;
+
+    return state;
 }

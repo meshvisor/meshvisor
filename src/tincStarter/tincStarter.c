@@ -6,6 +6,7 @@
 #include <errno.h>
 #include "../conf.h"
 #include "../pidfile/pidfile.h"
+#include "../xalloc.h"
 
 int tincStarterMain(struct config *config) {
     pid_t pid = check_pid(config->pidStarterFilePath);
@@ -34,11 +35,20 @@ int tincStarterMain(struct config *config) {
 
     if (siginfo.si_signo == SIGUSR1) {
         printf("TincStarter: Got SIGUSR1, start Tinc\n");
+        struct state *state = parseStateFileIfExists(config);
+        if (NULL == state) {
+            fprintf(stderr, "[ERROR] TincStarter: Logic Exception - state is empty\n");
+            abort();
+        }
 
-        execl("/usr/sbin/tincd"," ","-D", "-c", "/home/msalamakhin/CLionProjects/meshvisor/build/work/var/lib/meshvisor/network/default", "--pidfile=/home/msalamakhin/CLionProjects/meshvisor/build/work/var/run/meshvisor/tinc.pid", NULL);
+        char *configOption = NULL;
+        xasprintf(&configOption, "-c%s", state->configDir);
+        char *pidOption = NULL;
+        xasprintf(&pidOption, "--pidfile=%s", config->pidTincFilePath);
+        execl("/usr/sbin/tincd"," ","-D", configOption, pidOption, NULL);
     } else {
         printf("TincStarter: Got signal '%s'\n", strsignal(siginfo.si_signo));
     }
 
-    return 0;
+    return 1;
 }

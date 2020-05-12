@@ -8,7 +8,7 @@
 #include "xalloc.h"
 #include "ini/src/ini.h"
 
-void parseStateFileIfExists(struct config *config) {
+struct state *parseStateFileIfExists(struct config *config) {
     FILE *f = fopen(config->stateFilePath, "rb");
     if (f != NULL) {
         fseek(f, 0, SEEK_END);
@@ -19,22 +19,69 @@ void parseStateFileIfExists(struct config *config) {
         fclose(f);
 
         cJSON *json = cJSON_Parse(string);
-        if (!cJSON_HasObjectItem(json, "number")) {
-            logger(LOG_ERR, "Unexpected state: Property 'number' isn't exists");
-            abort();
-        }
-        config->stateNumber = cJSON_GetObjectItem(json, "number")->valueint;
-    } else {
-        config->stateNumber = 0;
-        logger(LOG_DEBUG, "State file not exists: '%s'", config->stateFilePath);
+        return createState(
+                config,
+                cJSON_GetObjectItem(json, "number")->valueint,
+                cJSON_GetObjectItem(json, "network")->valuestring,
+                cJSON_GetObjectItem(json, "node")->valuestring
+        );
     }
+
+    return NULL;
+}
+
+struct state *createState(struct config *config, int number, char *network, char *node) {
+    struct state *state = xmalloc(sizeof(struct state));
+
+    state->number = number;
+    state->network = network;
+    state->node = node;
+    xasprintf(&state->configDir, "%s/%s", config->networkDir, state->network);
+    xasprintf(&state->tincConfPath, "%s/tinc.conf", state->configDir);
+    xasprintf(&state->hostsDir, "%s/hosts", state->configDir);
+    xasprintf(&state->hostsFilePath, "%s/%s", state->hostsDir, state->node);
+    xasprintf(&state->tincUpFilePath, "%s/tinc-up", state->configDir);
+    xasprintf(&state->tincDownFilePath, "%s/tinc-down", state->configDir);
+
+    return state;
+}
+
+void dumpState(struct config *config, struct state *state) {
+    cJSON *json = cJSON_CreateObject();
+    cJSON *item = cJSON_AddNumberToObject(json, "number", state->number);
+    if (!item || item->valueint != state->number) {
+        logger(LOG_ERR, "Create postJson string property memory error");
+        abort();
+    }
+    item = cJSON_AddStringToObject(json, "network", state->network);
+    if (!item || strcmp(item->valuestring, state->network)) {
+        logger(LOG_ERR, "Create postJson string property memory error");
+        abort();
+    }
+    item = cJSON_AddStringToObject(json, "node", state->node);
+    if (!item || strcmp(item->valuestring, state->node)) {
+        logger(LOG_ERR, "Create postJson string property memory error");
+        abort();
+    }
+
+    char *jsonStr = cJSON_PrintUnformatted(json);
+    if (!jsonStr) {
+        logger(LOG_ERR, "Error generation postJsonStr");
+        abort();
+    }
+    FILE *fPtrTincConf = fopen(config->stateFilePath, "w");
+    if (fPtrTincConf == NULL) {
+        logger(LOG_ERR, "Cannot create state file: '%s'", state->tincConfPath);
+        abort();
+    }
+    fprintf(fPtrTincConf, jsonStr);
+    fclose(fPtrTincConf);
 }
 
 struct config *parseUserConfig() {
     struct config *config = xmalloc(sizeof(struct config));
 
-    ini_t *cfg = ini_load(ETCDIR
-    "/meshvisor.conf");
+    ini_t *cfg = ini_load( ETCDIR "/meshvisor.conf");
     if (NULL == cfg) {
         fprintf(stderr, "Cannot read config file %s/meshvisor.conf\n", ETCDIR);
         abort();
@@ -69,57 +116,11 @@ struct config *parseUserConfig() {
 
     ini_free(cfg);
 
-//    config_init(&cfg);
-//    if (!config_read_file(&cfg, ETCDIR "/meshvisor.conf")) {
-//        if (NULL == config_error_file(&cfg)) {
-//            logger(LOG_ERR, "Cannot read config file %s/meshvisor.conf", ETCDIR);
-//        } else {
-//            logger(LOG_ERR, "%s:%d - %s", config_error_file(&cfg), config_error_line(&cfg), config_error_text(&cfg));
-//        }
-//        abort();
-//    } else {
-//        if (!config_lookup_string(&cfg, "accessToken", &str)) {
-//            logger(LOG_ERR, "Config property \"accessToken\" not exists");
-//            abort();
-//        } else {
-//            config->accessToken = xstrdup(str);
-//        }
-//        if (!config_lookup_string(&cfg, "encryptionKey", &str)) {
-//            logger(LOG_ERR, "Config property \"encryptionKey\" not exists");
-//            abort();
-//        } else {
-//            config->encryptionKey = (uint8_t *) xstrdup(str);
-//        }
-//        if (!config_lookup_string(&cfg, "interface", &str)) {
-//            logger(LOG_ERR, "Config property \"interface\" not exists");
-//            abort();
-//        } else {
-//            config->interface = xstrdup(str);
-//        }
-//        if (!config_lookup_int(&cfg, "poolingRate", config->poolingRate)) {
-//            logger(LOG_ERR, "Config property \"poolingRate\" not exists");
-//            abort();
-//        }
-//        config->poolingRate = 3;
-//    }
-//    config_destroy(&cfg);
-
     xasprintf(&config->pidMeshvisorFilePath, "%s/meshvisor.pid", RUNDIR);
     xasprintf(&config->pidStarterFilePath, "%s/tincStarter.pid", RUNDIR);
     xasprintf(&config->pidTincFilePath, "%s/tinc.pid", RUNDIR);
     xasprintf(&config->networkDir, "%s/network", LIBDIR);
     xasprintf(&config->stateFilePath, "%s/%s", LIBDIR, "state.json");
 
-    parseStateFileIfExists(config);
-
     return config;
-}
-
-void setConfigPaths(struct config *config, char *networkName, char *nodeName) {
-    xasprintf(&config->configDir, "%s/%s", config->networkDir, networkName);
-    xasprintf(&config->tincConfPath, "%s/tinc.conf", config->configDir);
-    xasprintf(&config->hostsDir, "%s/hosts", config->configDir);
-    xasprintf(&config->hostsFilePath, "%s/%s", config->hostsDir, nodeName);
-    xasprintf(&config->tincUpFilePath, "%s/tinc-up", config->configDir);
-    xasprintf(&config->tincDownFilePath, "%s/tinc-down", config->configDir);
 }
