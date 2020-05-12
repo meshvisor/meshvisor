@@ -12,13 +12,13 @@
 uint8_t *genIv() {
     const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     int i = 0;
-    uint8_t *iv = xmalloc(sizeof(uint8_t) * IV_SIZE);;
+    uint8_t *iv = xmalloc(sizeof(uint8_t) * IV_SIZE+1);;
 
-    for (i = 0; i < IV_SIZE - 1; i++) {
+    for (i = 0; i < IV_SIZE; i++) {
         int key = rand() % (int) (sizeof charset - 1);
         iv[i] = charset[key];
     }
-    iv[15] = '\0';
+    iv[IV_SIZE] = '\0';
 
     return iv;
 }
@@ -59,7 +59,10 @@ char *encodeFileByPath(char *path, uint8_t *key, int size) {
 
     char *base64WithIv;
     xasprintf(&base64WithIv, "%s%s", iv, base64str);
-//    printf("\nBASE64: %s\n", base64str);
+    printf("\nkey: %s\n", key);
+    printf("\niv: %s\n", iv);
+    printf("\nBASE64: %s\n", base64str);
+    printf("\nBASE64WITHIV: %s\n", base64WithIv);
 
 
 //    uint8_t *iv2 = xmalloc(sizeof(uint8_t *) * IV_SIZE);
@@ -99,11 +102,11 @@ uint8_t *decode(char *string, uint8_t *key, int size) {
 //    logger(LOG_DEBUG, "decode: string: '%s'", string);
     memmove(iv, string, IV_SIZE);
 //    logger(LOG_DEBUG, "decode: iv: '%s'", (char *) iv);
-    iv[15] = '\0';
+    iv[IV_SIZE] = '\0';
 
     int base64strSize = sizeof(char *) * strlen(string);
     char *base64str = xmalloc(base64strSize);
-    memmove(base64str, string + IV_SIZE-1, base64strSize);
+    memmove(base64str, string + IV_SIZE, base64strSize);
 //    logger(LOG_DEBUG, "decode: base64str: '%s'", base64str);
     uint8_t *result = xmalloc(sizeof(uint8_t *) * size);
     b64tobin(result, base64str);
